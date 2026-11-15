@@ -1,0 +1,27 @@
+node tools/load.js --url http://localhost:8080 --rps 400 --duration 120
+load: 400 req/s for 120s -> http://localhost:8080/events (payload ~8192B, replay 0.05)
+[   5s] sent=1994 status[201:1902 409:92] errors[-] p50=8ms p95=13ms p99=26ms
+[  10s] sent=2002 status[201:1898 409:102] errors[-] p50=8ms p95=18ms p99=40ms
+[  15s] sent=2000 status[201:1904 409:92] errors[-] p50=8ms p95=13ms p99=29ms
+[  20s] sent=1999 status[201:1909 409:96] errors[-] p50=8ms p95=12ms p99=17ms
+[  25s] sent=1997 status[201:1882 409:100] errors[-] p50=6ms p95=32ms p99=135ms
+[  30s] sent=1994 status[201:1898 409:111] errors[-] p50=9ms p95=21ms p99=32ms
+[  35s] sent=2000 status[201:1918 409:82] errors[-] p50=8ms p95=15ms p99=24ms
+[  40s] sent=1996 status[201:1918 409:78] errors[-] p50=8ms p95=13ms p99=15ms
+[  45s] sent=2018 status[201:1893 409:104] errors[-] p50=8ms p95=13ms p99=19ms
+[  50s] sent=1989 status[201:1918 409:92] errors[-] p50=8ms p95=16ms p99=27ms
+[  55s] sent=1999 status[201:1880 409:119] errors[-] p50=8ms p95=12ms p99=24ms
+[  60s] sent=2003 status[201:1901 409:102] errors[-] p50=7ms p95=19ms p99=87ms
+[  65s] sent=2011 status[201:1890 409:103] errors[-] p50=8ms p95=22ms p99=140ms
+[  70s] sent=1997 status[201:1921 409:92] errors[-] p50=8ms p95=70ms p99=117ms
+[  75s] sent=1996 status[201:1898 409:100] errors[-] p50=9ms p95=17ms p99=24ms
+[  80s] sent=1992 status[201:1881 409:111] errors[-] p50=8ms p95=13ms p99=19ms
+[  85s] sent=2013 status[201:1918 409:95] errors[-] p50=7ms p95=11ms p99=17ms
+[  90s] sent=1996 status[201:1875 409:121] errors[-] p50=7ms p95=12ms p99=13ms
+[  95s] sent=1997 status[201:1895 409:102] errors[-] p50=8ms p95=16ms p99=82ms
+[ 100s] sent=1998 status[201:1896 409:102] errors[-] p50=8ms p95=14ms p99=18ms
+[ 105s] sent=2009 status[201:1902 409:107] errors[-] p50=8ms p95=15ms p99=34ms
+[ 110s] sent=1997 status[201:1896 409:101] errors[-] p50=8ms p95=12ms p99=14ms
+[ 115s] sent=1998 status[201:1899 409:99] errors[-] p50=8ms p95=12ms p99=16ms
+
+total: sent=47989 status[201:45580 409:2409] errors[-] p50=8ms p95=15ms p99=38ms

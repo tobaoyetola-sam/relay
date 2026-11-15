@@ -1,0 +1,63 @@
+node tools/load.js --url http://localhost:8080 --rps 150 --duration 300
+load: 150 req/s for 300s -> http://localhost:8080/events (payload ~8192B, replay 0.05)
+[   5s] sent=747 status[201:714 409:33] errors[-] p50=7ms p95=19ms p99=35ms
+[  10s] sent=748 status[201:722 409:26] errors[-] p50=7ms p95=12ms p99=22ms
+[  15s] sent=748 status[201:715 409:33] errors[-] p50=7ms p95=12ms p99=22ms
+[  20s] sent=755 status[201:728 409:27] errors[-] p50=7ms p95=12ms p99=16ms
+[  25s] sent=746 status[201:707 409:39] errors[-] p50=6ms p95=11ms p99=21ms
+[  30s] sent=756 status[201:723 409:25] errors[-] p50=6ms p95=11ms p99=25ms
+[  35s] sent=747 status[201:721 409:34] errors[-] p50=7ms p95=12ms p99=15ms
+[  40s] sent=751 status[201:662 409:43] errors[-] p50=5ms p95=12ms p99=25ms
+[  45s] sent=752 status[201:746 409:44] errors[-] p50=10ms p95=1510ms p99=1691ms
+[  50s] sent=749 status[201:719 409:38] errors[-] p50=5ms p95=11ms p99=37ms
+[  55s] sent=748 status[201:716 409:32] errors[-] p50=5ms p95=17ms p99=117ms
+[  60s] sent=755 status[201:719 409:36] errors[-] p50=7ms p95=13ms p99=134ms
+[  65s] sent=747 status[201:709 409:38] errors[-] p50=7ms p95=11ms p99=12ms
+[  70s] sent=754 status[201:709 409:39] errors[-] p50=7ms p95=12ms p99=28ms
+[  75s] sent=748 status[201:713 409:41] errors[-] p50=7ms p95=13ms p99=62ms
+[  80s] sent=747 status[201:704 409:43] errors[-] p50=7ms p95=12ms p99=25ms
+[  85s] sent=755 status[201:721 409:34] errors[-] p50=6ms p95=11ms p99=24ms
+[  90s] sent=748 status[201:708 409:40] errors[-] p50=7ms p95=13ms p99=60ms
+[  95s] sent=749 status[201:716 409:33] errors[-] p50=6ms p95=20ms p99=33ms
+[ 100s] sent=748 status[201:717 409:31] errors[-] p50=7ms p95=12ms p99=13ms
+[ 105s] sent=756 status[201:713 409:36] errors[-] p50=6ms p95=12ms p99=23ms
+[ 110s] sent=748 status[201:713 409:42] errors[-] p50=7ms p95=11ms p99=14ms
+[ 115s] sent=748 status[201:713 409:35] errors[-] p50=6ms p95=21ms p99=103ms
+[ 120s] sent=748 status[201:715 409:33] errors[-] p50=6ms p95=12ms p99=32ms
+[ 125s] sent=755 status[201:707 409:48] errors[-] p50=6ms p95=14ms p99=32ms
+[ 130s] sent=749 status[201:711 409:38] errors[-] p50=6ms p95=12ms p99=17ms
+[ 135s] sent=748 status[201:711 409:37] errors[-] p50=6ms p95=12ms p99=21ms
+[ 140s] sent=750 status[201:709 409:41] errors[-] p50=7ms p95=16ms p99=44ms
+[ 145s] sent=750 status[201:702 409:48] errors[-] p50=5ms p95=13ms p99=30ms
+[ 150s] sent=748 status[201:723 409:25] errors[-] p50=7ms p95=325ms p99=479ms
+[ 155s] sent=754 status[201:621 409:8 500:32] errors[ECONNRESET:93] p50=8ms p95=1023ms p99=1099ms
+[ 160s] sent=746 status[201:703 409:24 500:19] errors[-] p50=7ms p95=12ms p99=18ms
+[ 165s] sent=757 status[201:704 409:28 500:14] errors[-] p50=6ms p95=12ms p99=16ms
+[ 170s] sent=749 status[201:728 409:32] errors[-] p50=8ms p95=14ms p99=137ms
+[ 175s] sent=746 status[201:705 409:41] errors[-] p50=7ms p95=12ms p99=16ms
+[ 180s] sent=756 status[201:716 409:40] errors[-] p50=7ms p95=11ms p99=15ms
+[ 185s] sent=746 status[201:710 409:36] errors[-] p50=7ms p95=13ms p99=51ms
+[ 190s] sent=747 status[201:713 409:34] errors[-] p50=7ms p95=11ms p99=16ms
+[ 195s] sent=755 status[201:715 409:40] errors[-] p50=6ms p95=10ms p99=13ms
+[ 200s] sent=748 status[201:713 409:35] errors[-] p50=7ms p95=12ms p99=20ms
+[ 205s] sent=754 status[201:698 409:49] errors[-] p50=7ms p95=12ms p99=24ms
+[ 210s] sent=748 status[201:723 409:32] errors[-] p50=7ms p95=12ms p99=27ms
+[ 215s] sent=748 status[201:700 409:48] errors[-] p50=7ms p95=15ms p99=107ms
+[ 220s] sent=749 status[201:714 409:35] errors[-] p50=7ms p95=12ms p99=32ms
+[ 225s] sent=750 status[201:716 409:34] errors[-] p50=6ms p95=12ms p99=16ms
+[ 230s] sent=750 status[201:710 409:40] errors[-] p50=7ms p95=18ms p99=132ms
+[ 235s] sent=756 status[201:709 409:47] errors[-] p50=7ms p95=13ms p99=43ms
+[ 240s] sent=748 status[201:703 409:45] errors[-] p50=7ms p95=13ms p99=59ms
+[ 245s] sent=748 status[201:722 409:26] errors[-] p50=4ms p95=11ms p99=33ms
+[ 250s] sent=749 status[201:711 409:38] errors[-] p50=7ms p95=13ms p99=22ms
+[ 255s] sent=756 status[201:721 409:27] errors[-] p50=7ms p95=17ms p99=204ms
+[ 260s] sent=748 status[201:715 409:41] errors[-] p50=7ms p95=12ms p99=22ms
+[ 265s] sent=747 status[201:713 409:34] errors[-] p50=6ms p95=13ms p99=29ms
+[ 270s] sent=755 status[201:712 409:36] errors[-] p50=7ms p95=17ms p99=43ms
+[ 275s] sent=749 status[201:715 409:41] errors[-] p50=6ms p95=32ms p99=76ms
+[ 280s] sent=748 status[201:695 409:53] errors[-] p50=7ms p95=120ms p99=323ms
+[ 285s] sent=747 status[201:705 409:42] errors[-] p50=7ms p95=12ms p99=13ms
+[ 290s] sent=755 status[201:626 409:30] errors[ECONNRESET:97] p50=8ms p95=25ms p99=74ms
+[ 295s] sent=749 status[-] errors[ECONNRESET:89] p50=0ms p95=0ms p99=0ms
+
+total: sent=44997 status[201:41281 409:2108 500:70] errors[ECONNRESET:1028 TIMEOUT:510] p50=7ms p95=15ms p99=816ms
