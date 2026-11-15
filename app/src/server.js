@@ -58,6 +58,10 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 
 app.use((req, res, next) => {
+  // While draining, tell keep-alive clients to reconnect elsewhere. Closing
+  // their idle sockets instead races with requests already on the wire and
+  // shows up as ECONNRESET (seen: 19 resets during a rollout at 400 rps).
+  if (shuttingDown) res.set('Connection', 'close');
   const startedAt = Date.now();
   res.on('finish', () => logRequest(req, res, startedAt));
   next();
