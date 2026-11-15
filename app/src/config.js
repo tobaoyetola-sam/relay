@@ -21,7 +21,7 @@ function int(name, fallback) {
 }
 
 module.exports = {
-  port: int('PORT', 3000),
+  port: int('PORT', 8080),
   databaseUrl: required('DATABASE_URL'),
   signingSecret: required('SIGNING_SECRET'),
   poolMax: int('PG_POOL_MAX', 25),
