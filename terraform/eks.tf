@@ -65,11 +65,19 @@ resource "aws_iam_role_policy_attachment" "node_ecr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-# relay archives payloads to S3 and reads its config from Secrets Manager
+# relay archives payloads to S3 and reads its config from Secrets Manager.
+# Was s3:* and secretsmanager:* on *: any pod on any node could read every
+# secret and delete every bucket in the account. Scoped to what relay does.
+# Still on the node role (every pod on the node gets it); move to IRSA / EKS
+# Pod Identity for the relay service account. See NOTES.md.
 data "aws_iam_policy_document" "node_app" {
   statement {
-    actions   = ["s3:*", "secretsmanager:*"]
-    resources = ["*"]
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.archive.arn}/events/*"]
+  }
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.database_url.arn]
   }
 }
 
@@ -90,7 +98,7 @@ resource "aws_launch_template" "nodes" {
 
   metadata_options {
     http_endpoint               = "enabled"
-    http_tokens                 = "optional"
+    http_tokens                 = "required" # IMDSv2 only
     http_put_response_hop_limit = 2
   }
 
@@ -100,7 +108,7 @@ resource "aws_launch_template" "nodes" {
     ebs {
       volume_size = 50
       volume_type = "gp3"
-      encrypted   = false
+      encrypted   = true
     }
   }
 }
@@ -109,8 +117,10 @@ resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${var.name}-default"
   node_role_arn   = aws_iam_role.node.arn
-  subnet_ids      = [aws_subnet.public_a.id]
-  instance_types  = ["m5.large"]
+  # Both AZs. With only public_a every node, and so every pod, sat in one AZ
+  # and the zone topology spread in the Deployment could not be satisfied.
+  subnet_ids     = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  instance_types = ["m5.large"]
 
   scaling_config {
     desired_size = 3

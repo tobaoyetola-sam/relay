@@ -25,7 +25,15 @@ variable "db_host" {
   default     = "relay-prod.cluster-c1xyz.eu-west-1.rds.amazonaws.com"
 }
 
+# No default: the production password was committed here. It must be rotated
+# by the data team and passed in at apply time (TF_VAR_db_password).
 variable "db_password" {
-  type    = string
-  default = "Rel4y-prod-2024!"
+  type      = string
+  sensitive = true
+}
+
+variable "admin_cidr_blocks" {
+  description = "CIDRs allowed to SSH to the bastion. Empty means no SSH."
+  type        = list(string)
+  default     = []
 }

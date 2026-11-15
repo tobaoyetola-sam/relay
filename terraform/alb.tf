@@ -13,7 +13,9 @@ resource "aws_lb_target_group" "relay" {
   vpc_id   = aws_vpc.this.id
 
   health_check {
-    path                = "/health"
+    # Liveness, not readiness: in instance mode the ALB checks nodes, and a
+    # DB-dependent check would mark every node unhealthy during a DB blip.
+    path                = "/livez"
     interval            = 10
     timeout             = 2
     healthy_threshold   = 2

@@ -23,11 +23,11 @@ resource "aws_security_group" "bastion" {
   vpc_id = aws_vpc.this.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from known admin ranges only"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.admin_cidr_blocks
   }
 
   egress {
@@ -43,9 +43,11 @@ resource "aws_security_group" "nodes" {
   vpc_id = aws_vpc.this.id
 
   ingress {
-    description     = "App traffic from the load balancer"
-    from_port       = 8080
-    to_port         = 8080
+    # The ALB targets the nodes on the relay NodePort, not on 8080. With 8080
+    # here every target failed its health check and prod served nothing.
+    description     = "App traffic from the load balancer to the relay NodePort"
+    from_port       = var.app_node_port
+    to_port         = var.app_node_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -56,14 +58,6 @@ resource "aws_security_group" "nodes" {
     to_port         = 22
     protocol        = "tcp"
     security_groups = [aws_security_group.bastion.id]
-  }
-
-  ingress {
-    description = "SSH for debugging"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
