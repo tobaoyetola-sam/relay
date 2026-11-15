@@ -6,7 +6,14 @@ metadata:
   labels:
     app: relay
 spec:
-  replicas: 1
+  # No `replicas`: the HPA owns the count. Setting it here would reset the
+  # deployment to that number on every `kubectl apply`.
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: relay
@@ -15,6 +22,12 @@ spec:
       labels:
         app: relay
     spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
@@ -22,16 +35,20 @@ spec:
           labelSelector:
             matchLabels:
               app: relay
-      containers:
-        - name: relay
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: relay
+      # Migrations run before the server starts, serialised by an advisory
+      # lock in migrate.js, so concurrent pod starts cannot race each other.
+      initContainers:
+        - name: migrate
           image: relay:latest
           imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8080
-          envFrom:
-            - configMapRef:
-                name: relay-config
-          env:
+          command: ["node", "src/migrate.js"]
+          env: &env
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -42,14 +59,51 @@ spec:
                 secretKeyRef:
                   name: relay-secrets
                   key: SIGNING_SECRET
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 1
-            failureThreshold: 2
+          securityContext: &containerSecurity
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
             limits:
               memory: 256Mi
+      containers:
+        - name: relay
+          image: relay:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: relay-config
+          env: *env
+          securityContext: *containerSecurity
+          # Readiness gates traffic and includes the DB check.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          # Liveness only proves the event loop answers. It must not depend on
+          # the database, or a DB blip restarts every pod at the same moment.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            # Requests are required for the CPU-based HPA to work at all.
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi

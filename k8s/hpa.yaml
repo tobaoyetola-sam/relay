@@ -8,7 +8,9 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: relay
-  minReplicas: 1
+  # 3 so one pod lost (node, zone, rollout) never leaves a single pod.
+  minReplicas: 3
+  # Capped by the DB connection budget, see configmap.yaml.
   maxReplicas: 10
   metrics:
     - type: Resource
@@ -16,4 +18,7 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 60
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
