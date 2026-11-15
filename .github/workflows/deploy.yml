@@ -1,35 +1,93 @@
 name: deploy
 
 on:
+  pull_request:
   push:
     branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   AWS_REGION: eu-west-1
   ECR_REPO: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/relay
 
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-
-      - uses: aws-actions/configure-aws-credentials@master
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - name: Syntax check
+        run: for f in app/src/*.js; do node --check "$f"; done
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: app
+      - name: Docker build
+        run: docker build -t relay:ci app
+      - name: Manifests are valid
+        run: kubectl apply --dry-run=client -f k8s/ >/dev/null
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform validate
+        working-directory: terraform
+        run: terraform init -backend=false && terraform validate
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Protected environment: add required reviewers in repo settings.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # OIDC, no long-lived AWS keys in repo secrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
-        run: aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REPO
+      - uses: aws-actions/amazon-ecr-login@v2
 
+      # Immutable tag per commit. `latest` + `rollout restart` made it
+      # impossible to tell what was running or to roll back.
       - name: Build and push
         run: |
-          docker build -t $ECR_REPO:latest app
-          docker push $ECR_REPO:latest
+          docker build -t "$ECR_REPO:$GITHUB_SHA" app
+          docker push "$ECR_REPO:$GITHUB_SHA"
 
-      - name: Deploy to production
+      # Only the app's manifests. k8s/postgres.yaml and k8s/secret.yaml are
+      # LOCAL stand-ins: applying them (as `kubectl apply -f k8s/` did) would
+      # start a throwaway Postgres in prod and point relay at it.
+      # The prod relay-secrets must come from Secrets Manager (see NOTES.md).
+      - name: Deploy
+        id: deploy
         run: |
           aws eks update-kubeconfig --name relay-prod
-          kubectl apply -f k8s/
-          kubectl -n relay rollout restart deployment/relay
+          mkdir -p out
+          sed "s#image: relay:latest#image: $ECR_REPO:$GITHUB_SHA#" k8s/deployment.yaml > out/deployment.yaml
+          kubectl apply \
+            -f k8s/00-namespace.yaml \
+            -f k8s/configmap.yaml \
+            -f k8s/service.yaml \
+            -f k8s/pdb.yaml \
+            -f k8s/hpa.yaml \
+            -f out/deployment.yaml
+          kubectl -n relay rollout status deployment/relay --timeout=5m
+
+      - name: Roll back on failure
+        # Only if the rollout itself failed, never for a failed build.
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: kubectl -n relay rollout undo deployment/relay
