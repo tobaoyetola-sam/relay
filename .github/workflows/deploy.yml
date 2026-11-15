@@ -35,8 +35,12 @@ jobs:
         working-directory: app
       - name: Docker build
         run: docker build -t relay:ci app
+      # Offline schema validation. `kubectl apply --dry-run=client` still
+      # needs a live API server for its schema, which CI does not have.
       - name: Manifests are valid
-        run: kubectl apply --dry-run=client -f k8s/ >/dev/null
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          ./kubeconform -summary k8s/
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform validate
         working-directory: terraform
