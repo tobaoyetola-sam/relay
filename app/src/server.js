@@ -1,8 +1,6 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
 const express = require('express');
 
 const config = require('./config');
@@ -10,14 +8,11 @@ const { pool } = require('./db');
 
 // ---------------------------------------------------------------- logging
 
-let accessLog = process.stdout;
-if (config.logFile) {
-  fs.mkdirSync(path.dirname(config.logFile), { recursive: true });
-  accessLog = fs.createWriteStream(config.logFile, { flags: 'a' });
-}
-
+// Access logs go to stdout as JSON lines so the platform collects them.
+// (They used to go to a file inside the container: invisible to
+// `kubectl logs` and growing without bound on the node's disk.)
 function logRequest(req, res, startedAt) {
-  accessLog.write(
+  process.stdout.write(
     JSON.stringify({
       ts: new Date().toISOString(),
       method: req.method,
@@ -29,17 +24,8 @@ function logRequest(req, res, startedAt) {
   );
 }
 
-// ------------------------------------------------------------ idempotency
-
-// Clients retry with the same Idempotency-Key. Replays are answered from
-// memory so a retry storm never reaches the database.
-const seen = new Map();
-
-function remember(key, entry) {
-  seen.set(key, entry);
-  if (config.dedupeMaxEntries > 0 && seen.size > config.dedupeMaxEntries) {
-    seen.delete(seen.keys().next().value);
-  }
+function logError(msg, fields) {
+  process.stderr.write(JSON.stringify({ ts: new Date().toISOString(), level: 'error', msg, ...fields }) + '\n');
 }
 
 // ---------------------------------------------------------------- archive
@@ -50,7 +36,8 @@ async function archive(id, payload) {
   if (!config.archiveBucket) return;
   const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
   // No explicit credentials: the SDK picks them up from the environment.
-  if (!s3) s3 = new S3Client({});
+  // Bounded timeout so a slow S3 call cannot pin a request open.
+  if (!s3) s3 = new S3Client({ requestHandler: { requestTimeout: config.archiveTimeoutMs } });
   await s3.send(
     new PutObjectCommand({
       Bucket: config.archiveBucket,
@@ -63,6 +50,9 @@ async function archive(id, payload) {
 
 // -------------------------------------------------------------------- app
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let shuttingDown = false;
+
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
@@ -73,48 +63,85 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', async (req, res) => {
+// Liveness: is the process able to serve at all? Deliberately does NOT touch
+// the database, so a database blip does not get every pod restarted at once.
+app.get('/livez', (req, res) => res.json({ status: 'ok' }));
+
+// Readiness: should this pod receive traffic? Fails while draining on shutdown
+// and when the database is unreachable. /health is kept as an alias because
+// the ALB target group health check uses it.
+async function ready(req, res) {
+  if (shuttingDown) return res.status(503).json({ status: 'shutting down' });
   try {
     await pool.query('SELECT 1');
     res.json({ status: 'ok' });
   } catch (err) {
     res.status(503).json({ status: 'unavailable', error: err.message });
   }
-});
+}
+app.get('/readyz', ready);
+app.get('/health', ready);
 
 app.post('/events', async (req, res) => {
   const key = req.get('Idempotency-Key');
   if (!key) {
     return res.status(400).json({ error: 'Idempotency-Key header is required' });
   }
-
-  const previous = seen.get(key);
-  if (previous) {
-    return res.status(409).json({ id: previous.id, duplicate: true });
+  // Without this, a non-JSON body was silently stored as {} with a 201.
+  if (!req.is('application/json')) {
+    return res.status(415).json({ error: 'Content-Type must be application/json' });
+  }
+  const payload = req.body;
+  if (payload === null || typeof payload !== 'object') {
+    return res.status(400).json({ error: 'body must be a JSON object or array' });
   }
 
   const id = crypto.randomUUID();
-  const payload = req.body;
   const signature = crypto
     .createHmac('sha256', config.signingSecret)
     .update(JSON.stringify(payload))
     .digest('hex');
 
+  // Idempotency is enforced by the database's unique index, not by a
+  // per-process memory map. The map only knew about keys this one pod had
+  // seen, so with more than one pod (or after any restart) a replay hit the
+  // unique index and returned 500 instead of 409. It also held every payload
+  // forever, which is what OOM-killed the pod.
+  let stored;
   try {
-    await pool.query(
-      'INSERT INTO events (id, idempotency_key, payload, signature) VALUES ($1, $2, $3, $4)',
+    const result = await pool.query(
+      `INSERT INTO events (id, idempotency_key, payload, signature)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
       [id, key, payload, signature],
     );
-    remember(key, { id, payload, signature });
-    await archive(id, payload);
-    res.status(201).json({ id, signature });
+    if (result.rowCount === 0) {
+      const { rows } = await pool.query('SELECT id FROM events WHERE idempotency_key = $1', [key]);
+      return res.status(409).json({ id: rows[0] ? rows[0].id : null, duplicate: true });
+    }
+    stored = true;
   } catch (err) {
-    console.error('failed to store event:', err.message);
-    res.status(500).json({ error: 'internal error' });
+    logError('failed to store event', { err: err.message, key });
+    return res.status(500).json({ error: 'internal error' });
   }
+
+  // The event is durably stored at this point. If the archive write fails we
+  // still answer 201: answering 500 would make the client retry, the retry
+  // would get 409, and the archive would never be written anyway. The error
+  // is logged with the id so it can be backfilled. (Proper fix: outbox.)
+  if (stored) {
+    try {
+      await archive(id, payload);
+    } catch (err) {
+      logError('archive failed', { err: err.message, id });
+    }
+  }
+  res.status(201).json({ id, signature });
 });
 
 app.get('/events/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'not found' });
   try {
     const { rows } = await pool.query(
       'SELECT id, idempotency_key, payload, signature, received_at FROM events WHERE id = $1',
@@ -123,11 +150,40 @@ app.get('/events/:id', async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: 'not found' });
     res.json(rows[0]);
   } catch (err) {
-    console.error('failed to read event:', err.message);
+    logError('failed to read event', { err: err.message });
     res.status(500).json({ error: 'internal error' });
   }
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`relay listening on :${config.port} (pool max ${config.poolMax})`);
 });
+
+// Keep idle connections open longer than the ALB's 60s idle timeout, or the
+// ALB will occasionally reuse a socket Node has just closed and return a 502.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+
+// ---------------------------------------------------------------- shutdown
+
+// On SIGTERM: fail readiness, keep serving for a short drain window while
+// endpoints/kube-proxy catch up, then stop accepting, finish in-flight
+// requests and close the pool. Without this, Node died mid-request on every
+// rollout and scale-in.
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`relay: ${signal} received, draining for ${config.shutdownDelayMs}ms`);
+  setTimeout(() => {
+    server.close(async () => {
+      await pool.end().catch(() => {});
+      console.log('relay: shutdown complete');
+      process.exit(0);
+    });
+    server.closeIdleConnections();
+  }, config.shutdownDelayMs);
+  // Hard stop well inside terminationGracePeriodSeconds.
+  setTimeout(() => process.exit(1), config.shutdownDelayMs + 15_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

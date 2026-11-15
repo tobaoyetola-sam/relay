@@ -24,9 +24,11 @@ module.exports = {
   port: int('PORT', 8080),
   databaseUrl: required('DATABASE_URL'),
   signingSecret: required('SIGNING_SECRET'),
-  poolMax: int('PG_POOL_MAX', 25),
-  // 0 means "no limit"
-  dedupeMaxEntries: int('DEDUPE_MAX_ENTRIES', 0),
-  logFile: process.env.LOG_FILE || '',
+  // Per-pod pool. The database allows 100 connections in total and that will
+  // not change this quarter, so pool size x max pods must stay well under it.
+  // See k8s/configmap.yaml for the budget.
+  poolMax: int('PG_POOL_MAX', 8),
   archiveBucket: process.env.ARCHIVE_BUCKET || '',
+  archiveTimeoutMs: int('ARCHIVE_TIMEOUT_MS', 2000),
+  shutdownDelayMs: int('SHUTDOWN_DELAY_MS', 5000),
 };
